@@ -1,120 +1,205 @@
-# ============================================================
-# DATA PREPROCESSING PRACTICAL
-# Dataset: train_and_test2.csv
-# ============================================================
+"""
+PR5: Data Preprocessing and Exploratory Data Analysis (EDA)
+Dataset: Titanic passenger dataset
 
-# -------------------- 1. IMPORT LIBRARIES --------------------
-import matplotlib.pyplot as plt
-import numpy as np
+Install required libraries (if not already installed):
+    pip install pandas matplotlib seaborn scikit-learn
+
+The program automatically downloads Titanic-Dataset.csv if it is not
+available in the current working folder.
+"""
+
+import os
+import urllib.request
+
 import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
-# -------------------- 2. LOAD THE DATASET --------------------
-df = pd.read_csv("train_and_test2.csv")
-print("Dataset loaded successfully!")
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+
+# -------------------- STEP 1: LOAD DATASET --------------------
+DATASET_FILE = "Titanic-Dataset.csv"
+DATASET_URL = (
+    "https://raw.githubusercontent.com/"
+    "datasciencedojo/datasets/master/titanic.csv"
+)
+
+if not os.path.exists(DATASET_FILE):
+    print("Dataset not found. Downloading Titanic dataset...")
+    try:
+        urllib.request.urlretrieve(DATASET_URL, DATASET_FILE)
+        print("Dataset downloaded successfully.")
+    except Exception as error:
+        raise RuntimeError(
+            "Could not download the Titanic dataset. "
+            "Download the CSV from the dataset source and place "
+            "'Titanic-Dataset.csv' in the same folder as this program. "
+            f"Download error: {error}"
+        )
+
+df = pd.read_csv(DATASET_FILE)
+
+print("\n========== DATASET OVERVIEW ==========")
+print("\nFirst five rows:")
 print(df.head())
 
-# -------------------- 3. CHECK THE DATASET --------------------
-print("\nShape of dataset:", df.shape)
-print("\nColumn names:")
-print(df.columns)
 print("\nDataset information:")
 df.info()
 
-# -------------------- 4. DATA CLEANING --------------------
-# Remove duplicate rows
-df = df.drop_duplicates()
+print("\nDataset shape:", df.shape)
 
-# Remove columns containing only one distinct value (zero variance)
-df = df.loc[:, df.nunique(dropna=False) > 1]
 
-# Rename the target column ('2urvived' is a common quirk in this CSV)
-df = df.rename(columns={"2urvived": "Survived"})
+# -------------------- STEP 2: DATA CLEANING --------------------
+print("\n========== DATA CLEANING ==========")
 
-print("\nDataset after cleaning:")
-print(df.head())
-print("\nShape after cleaning:", df.shape)
-
-# -------------------- 5. CHECK MISSING VALUES --------------------
-print("\nMissing values in each column:")
-print(df.isnull().sum())
-print("\nTotal missing values:", df.isnull().sum().sum())
-
-# -------------------- 6. HANDLE MISSING VALUES --------------------
-for col in df.columns:
-    if df[col].isnull().sum() > 0:
-        df[col] = df[col].fillna(df[col].median())
-
-print("\nMissing values after handling:")
+print("\nMissing values before cleaning:")
 print(df.isnull().sum())
 
-# -------------------- 7. STATISTICAL ANALYSIS --------------------
-print("\nStatistical Summary:")
+rows_before = len(df)
+df = df.drop_duplicates().copy()
+print("\nDuplicate rows removed:", rows_before - len(df))
+
+# Remove columns that are not useful for this practical.
+# Cabin has a large number of missing values in the standard dataset.
+columns_to_drop = ["PassengerId", "Name", "Ticket", "Cabin"]
+df = df.drop(columns=columns_to_drop, errors="ignore")
+
+# Remove rows where the target value is missing, if any.
+df = df.dropna(subset=["Survived"]).copy()
+
+print("\nColumns after cleaning:")
+print(df.columns.tolist())
+
+
+# -------------------- STEP 3: STATISTICAL ANALYSIS --------------------
+print("\n========== STATISTICAL ANALYSIS ==========")
+
+print("\nNumerical summary:")
 print(df.describe())
 
-if "Age" in df.columns:
-    print("\nMean Age:", df["Age"].mean())
-    print("Median Age:", df["Age"].median())
+print("\nCategorical summary:")
+print(df.describe(include=["object"]))
 
-if "Fare" in df.columns:
-    print("\nMaximum Fare:", df["Fare"].max())
-    print("Minimum Fare:", df["Fare"].min())
+print("\nSurvival count (0 = Not Survived, 1 = Survived):")
+print(df["Survived"].value_counts())
 
-# -------------------- 8. PLOT HISTOGRAMS --------------------
-cols_to_plot = [col for col in ["Age", "Fare"] if col in df.columns]
 
-if cols_to_plot:
-    df[cols_to_plot].hist(bins=20, figsize=(10, 4))
-    plt.suptitle("Histograms of Age and Fare")
-    plt.tight_layout()
-    plt.show()
+# -------------------- STEP 4: DATA VISUALIZATION --------------------
+print("\n========== DATA VISUALIZATION ==========")
 
-# -------------------- 9. PLOT BOXPLOTS --------------------
-if cols_to_plot:
-    plt.figure(figsize=(8, 4))
-    sns.boxplot(data=df[cols_to_plot])
-    plt.title("Boxplots of Age and Fare")
-    plt.tight_layout()
-    plt.show()
+numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
 
-# -------------------- 10. SEPARATE FEATURES AND TARGET --------------------
+# Histograms show the distribution of numerical features.
+df[numeric_columns].hist(figsize=(12, 8), bins=20, edgecolor="black")
+plt.suptitle("Histograms of Titanic Dataset", fontsize=14)
+plt.tight_layout()
+plt.show()
+
+# Boxplots help identify the spread and possible outliers.
+plt.figure(figsize=(12, 6))
+sns.boxplot(data=df[numeric_columns])
+plt.title("Boxplots of Numerical Features")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# -------------------- STEP 5: SEPARATE FEATURES AND TARGET --------------------
+print("\n========== FEATURE AND TARGET SEPARATION ==========")
+
 X = df.drop("Survived", axis=1)
 y = df["Survived"]
 
-print("\nFeatures shape:", X.shape)
-print("Target shape:", y.shape)
+numeric_features = X.select_dtypes(include=["number"]).columns.tolist()
+categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
 
-# -------------------- 11. SPLIT TRAINING AND TESTING DATA --------------------
+print("Numerical features:", numeric_features)
+print("Categorical features:", categorical_features)
+
+
+# -------------------- STEP 6: TRAIN-TEST SPLIT --------------------
+# Split before fitting imputers, encoders, or scalers to prevent data leakage.
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
 )
 
-print("\nTraining data:", X_train.shape)
-print("Testing data:", X_test.shape)
+print("\n========== TRAIN-TEST SPLIT ==========")
+print("Training feature shape:", X_train.shape)
+print("Testing feature shape:", X_test.shape)
+print("Training target shape:", y_train.shape)
+print("Testing target shape:", y_test.shape)
 
-# -------------------- 12. FEATURE SCALING --------------------
-scaler = StandardScaler()
 
-# Fit the scaler on training data and transform it
-X_train_scaled = scaler.fit_transform(X_train)
+# -------------------- STEP 7: MISSING VALUE HANDLING, ENCODING AND SCALING --------------------
+print("\n========== DATA PREPROCESSING ==========")
 
-# Use the same scaler parameters to transform testing data (avoids data leakage)
-X_test_scaled = scaler.transform(X_test)
+# Numerical columns:
+# 1. Replace missing values with the median.
+# 2. Standardize values using StandardScaler.
+numeric_pipeline = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
 
-print("\nScaled training data (first 5 rows):")
-print(X_train_scaled[:5])
+# Categorical columns:
+# 1. Replace missing values with the most frequent category.
+# 2. Convert categories into numeric columns using One-Hot Encoding.
+categorical_pipeline = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("encoder", OneHotEncoder(handle_unknown="ignore"))
+])
 
-print("\nScaled testing data (first 5 rows):")
-print(X_test_scaled[:5])
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("numerical", numeric_pipeline, numeric_features),
+        ("categorical", categorical_pipeline, categorical_features)
+    ]
+)
 
-# -------------------- 13. DISPLAY FINAL OUTPUT --------------------
-print("\n====================================")
-print("DATA PREPROCESSING COMPLETED")
-print("====================================")
-print("Training samples:", X_train_scaled.shape[0])
-print("Testing samples:", X_test_scaled.shape[0])
-print("Number of features:", X_train_scaled.shape[1])
-print("Missing values handled.")
-print("Feature scaling completed.")
+# Fit only on training data; apply the same transformations to test data.
+X_train_processed = preprocessor.fit_transform(X_train)
+X_test_processed = preprocessor.transform(X_test)
+
+# Convert output to dense arrays when the transformer returns sparse matrices.
+if hasattr(X_train_processed, "toarray"):
+    X_train_processed = X_train_processed.toarray()
+if hasattr(X_test_processed, "toarray"):
+    X_test_processed = X_test_processed.toarray()
+
+feature_names = preprocessor.get_feature_names_out()
+
+X_train_processed = pd.DataFrame(
+    X_train_processed,
+    columns=feature_names,
+    index=X_train.index
+)
+X_test_processed = pd.DataFrame(
+    X_test_processed,
+    columns=feature_names,
+    index=X_test.index
+)
+
+print("Missing values handled successfully.")
+print("Categorical features encoded using One-Hot Encoding.")
+print("Numerical features scaled using StandardScaler.")
+
+print("\nProcessed training data (first five rows):")
+print(X_train_processed.head())
+
+print("\nProcessed testing data (first five rows):")
+print(X_test_processed.head())
+
+print("\nFinal training data shape:", X_train_processed.shape)
+print("Final testing data shape:", X_test_processed.shape)
+
+print("\nPR5: Data Preprocessing and EDA completed successfully.")
